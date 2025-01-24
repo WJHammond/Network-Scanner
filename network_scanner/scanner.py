@@ -11,7 +11,9 @@ def ping_ip(ip):
     # This checks which operating system you are currently using
     if platform.system().lower() == "windows" :
         param = "-n"  
-    else : "-c"
+    else:
+        param = "-c"
+
     command = ["ping", param, "1", ip]
     
     # This checks if the ip is online or offline
@@ -23,6 +25,8 @@ def ping_ip(ip):
     except subprocess.CalledProcessError:
         print(f"[-] {ip} is offline")
         return False
+
+
 def scan_ip_range(ipStart, ipEnd):
     """Scan a range of IP addresses."""
     start = int(ipStart.split('.')[-1])
@@ -40,7 +44,7 @@ def scan_ports(ip, ports):
     for port in ports:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
+                s.settimeout(2)
                 result = s.connect_ex((ip, port))
                 if result == 0:
                     print(f"[+] Port {port} is open on {ip}")
@@ -48,15 +52,40 @@ def scan_ports(ip, ports):
                     print(f"[-] Port {port} is closed on {ip}")
         except Exception as e:
             print(f"[!] Error scanning port {port} on {ip}: {e}")
-"""
-# Test
-if __name__ == "__main__":
-    start_ip = "8.8.8.1"
-    end_ip = "8.8.8.10"
-    scan_ip_range(start_ip, end_ip)
-"""\
+
 
 if __name__ == "__main__":
-    ip_to_test = "8.8.8.8"
-    ports_to_test = [22, 80, 443]  # Common ports
-    scan_ports(ip_to_test, ports_to_test)
+    while True:
+        print("\nWelcome to my Network Scanner!")
+        print("Please choose an option:")
+        print("1. Scan a single IP address")
+        print("2. Scan a range of IP addresses")
+        print("3. Scan ports on an IP address")
+        print("4. Exit the scanner")
+
+        choice = input("Enter your choice (1, 2, 3, or 4): ").strip()
+
+        if choice == "1":
+            ip = input("Enter the IP address to scan: ").strip()
+            ping_ip(ip)
+        elif choice == "2":
+            ipStart = input("Enter the starting IP address: ").strip()
+            ipEnd = input("Enter the ending IP address: ").strip()
+            scan_ip_range(ipStart, ipEnd)
+        elif choice == "3":
+            ip = input("Enter the IP address to scan for open ports: ").strip()
+            try:
+                ports = input("Enter the ports to scan (comma-separated, e.g., 22,80,443): ").strip()
+                ports = [int(port.strip()) for port in ports.split(",")]
+    
+                if any(port < 1 or port > 65535 for port in ports):
+                    print("Invalid port range. Ports must be between 1 and 65535.")
+                else:
+                    scan_ports(ip, ports)
+            except ValueError:
+                print("Invalid input. Please enter a list of integers separated by commas.")
+        elif choice == "4":
+            print("Exiting the Network Scanner. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please enter 1, 2, 3, or 4.")
