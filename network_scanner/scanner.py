@@ -33,9 +33,30 @@ def scan_ip_range(ipStart, ipEnd):
         ip = f"{base_ip}.{i}"
         ping_ip(ip)
 
-
+        
+#This function takes an ip address and a list of ports to check
+def scan_ports(ip, ports):
+    """Scan specific ports on an IP address."""
+    for port in ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                result = s.connect_ex((ip, port))
+                if result == 0:
+                    print(f"[+] Port {port} is open on {ip}")
+                else:
+                    print(f"[-] Port {port} is closed on {ip}")
+        except Exception as e:
+            print(f"[!] Error scanning port {port} on {ip}: {e}")
+"""
 # Test
 if __name__ == "__main__":
     start_ip = "8.8.8.1"
     end_ip = "8.8.8.10"
     scan_ip_range(start_ip, end_ip)
+"""\
+
+if __name__ == "__main__":
+    ip_to_test = "8.8.8.8"
+    ports_to_test = [22, 80, 443]  # Common ports
+    scan_ports(ip_to_test, ports_to_test)
