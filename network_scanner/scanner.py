@@ -3,6 +3,7 @@ import subprocess
 import platform
 import ipaddress
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 
 def is_valid_ip(ip):
@@ -21,6 +22,8 @@ def is_valid_port(port):
 
 def ping_ip(ip):
     """Ping an IP address to check if it's online."""
+
+    # This checks which operating system you are currently using
     if platform.system().lower() == "windows":
         param = "-n"
     else:
@@ -28,6 +31,7 @@ def ping_ip(ip):
 
     command = ["ping", param, "1", ip]
 
+    # This checks if the ip is online or offline
     try:
         subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         print(f"[+] {ip} is online")
@@ -38,7 +42,7 @@ def ping_ip(ip):
 
 
 def scan_ip_range(ipStart, ipEnd):
-    """Scan a range of IP addresses."""
+    """Scan a range of IP addresses using multi-threading."""
     if not is_valid_ip(ipStart) or not is_valid_ip(ipEnd):
         print("Invalid IP range. Please provide valid IP addresses.")
         return
@@ -47,21 +51,24 @@ def scan_ip_range(ipStart, ipEnd):
     end = int(ipEnd.split('.')[-1])
     base_ip = '.'.join(ipStart.split('.')[:-1])  # Get the base (e.g., 192.168.1)
 
-    for i in range(start, end + 1):
+    def scan_single_ip(i):
         ip = f"{base_ip}.{i}"
         ping_ip(ip)
 
+    with ThreadPoolExecutor(max_workers=10) as executor:  # Limit threads to 10 (Change this depending on how many ips you want to check at once)
+        executor.map(scan_single_ip, range(start, end + 1))
 
+# This function takes an ip address and a list of ports to check
 def scan_ports(ip, ports):
-    """Scan specific ports on an IP address."""
+    """Scan specific ports on an IP address using multi-threading."""
     if not is_valid_ip(ip):
         print("Invalid IP address. Please provide a valid IP address.")
         return
 
-    for port in ports:
+    def scan_single_port(port):
         if not is_valid_port(port):
             print(f"Invalid port {port}. Ports must be between 1 and 65535.")
-            continue
+            return
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -73,6 +80,9 @@ def scan_ports(ip, ports):
                     print(f"[-] Port {port} is closed on {ip}")
         except Exception as e:
             print(f"[!] Error scanning port {port} on {ip}: {e}")
+
+    with ThreadPoolExecutor(max_workers=10) as executor:  # Limit threads to 10 (Change this depending on how many ports you want to check at once)
+        executor.map(scan_single_port, ports)
 
 
 if __name__ == "__main__":
