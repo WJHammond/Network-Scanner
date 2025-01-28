@@ -2,10 +2,10 @@ import socket
 import subprocess
 import platform
 import ipaddress
-import sys
-from concurrent.futures import ThreadPoolExecutor
+import json
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, filedialog
+from concurrent.futures import ThreadPoolExecutor
 
 def is_valid_ip(ip):
     """Check if the IP address is valid."""
@@ -33,40 +33,39 @@ def ping_ip(ip):
     # This checks if the ip is online or offline
     try:
         subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        return f"[+] {ip} is online"
+        return True
     except subprocess.CalledProcessError:
-        return f"[-] {ip} is offline"
+        return False
 
 def scan_ip_range(ipStart, ipEnd):
     """Scan a range of IP addresses using multi-threading."""
     if not is_valid_ip(ipStart) or not is_valid_ip(ipEnd):
-        return "Invalid IP range. Please provide valid IP addresses."
+        print("Invalid IP range. Please provide valid IP addresses.")
+        return
 
     start = int(ipStart.split('.')[-1])
     end = int(ipEnd.split('.')[-1])
     base_ip = '.'.join(ipStart.split('.')[:-1])  # Get the base (e.g., 192.168.1)
 
-    results = []
-
     def scan_single_ip(i):
         ip = f"{base_ip}.{i}"
-        results.append(ping_ip(ip))
+        if ping_ip(ip):
+            print(f"[+] {ip} is online")
+        else:
+            print(f"[-] {ip} is offline")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:  # Limit threads to 10 (Change this depending on how many ips you want to check at once)
+    with ThreadPoolExecutor(max_workers=10) as executor:  # Limit threads to 10
         executor.map(scan_single_ip, range(start, end + 1))
-
-    return "\n".join(results)
 
 def scan_ports(ip, ports):
     """Scan specific ports on an IP address using multi-threading."""
     if not is_valid_ip(ip):
-        return "Invalid IP address. Please provide a valid IP address."
-
-    results = []
+        print("Invalid IP address. Please provide a valid IP address.")
+        return
 
     def scan_single_port(port):
         if not is_valid_port(port):
-            results.append(f"Invalid port {port}. Ports must be between 1 and 65535.")
+            print(f"Invalid port {port}. Ports must be between 1 and 65535.")
             return
 
         try:
@@ -74,67 +73,94 @@ def scan_ports(ip, ports):
                 s.settimeout(2)
                 result = s.connect_ex((ip, port))
                 if result == 0:
-                    results.append(f"[+] Port {port} is open on {ip}")
+                    print(f"[+] Port {port} is open on {ip}")
                 else:
-                    results.append(f"[-] Port {port} is closed on {ip}")
+                    print(f"[-] Port {port} is closed on {ip}")
         except Exception as e:
-            results.append(f"[!] Error scanning port {port} on {ip}: {e}")
+            print(f"[!] Error scanning port {port} on {ip}: {e}")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:  # Limit threads to 10 (Change this depending on how many ports you want to check at once)
+    with ThreadPoolExecutor(max_workers=10) as executor:
         executor.map(scan_single_port, ports)
 
-    return "\n".join(results)
+def save_configuration(data):
+    """Save the configuration to a JSON file."""
+    file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
+    if not file_path:
+        return
 
-def start_gui():
-    """Start the GUI for the network scanner."""
-    def handle_ping():
-        ip = simpledialog.askstring("Ping IP", "Enter the IP address to scan:")
-        if ip and is_valid_ip(ip):
-            result = ping_ip(ip)
-            messagebox.showinfo("Ping Result", result)
+    try:
+        with open(file_path, "w") as file:
+            json.dump(data, file, indent=4)
+        messagebox.showinfo("Success", "Configuration saved successfully!")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save configuration: {e}")
+
+def main_gui():
+    """Create the main GUI for the network scanner."""
+    def handle_save():
+        data = {
+            "single_ip": single_ip_entry.get(),
+            "range_start": range_start_entry.get(),
+            "range_end": range_end_entry.get(),
+            "ports": ports_entry.get()
+        }
+        save_configuration(data)
+
+    def handle_single_ip_scan():
+        ip = single_ip_entry.get().strip()
+        if is_valid_ip(ip):
+            if ping_ip(ip):
+                messagebox.showinfo("Result", f"[+] {ip} is online")
+            else:
+                messagebox.showinfo("Result", f"[-] {ip} is offline")
         else:
             messagebox.showerror("Error", "Invalid IP address. Please try again.")
 
-    def handle_ip_range():
-        ipStart = simpledialog.askstring("IP Range", "Enter the starting IP address:")
-        ipEnd = simpledialog.askstring("IP Range", "Enter the ending IP address:")
-        if ipStart and ipEnd:
-            result = scan_ip_range(ipStart, ipEnd)
-            messagebox.showinfo("IP Range Scan Results", result)
-        else:
-            messagebox.showerror("Error", "Invalid IP range. Please try again.")
+    def handle_range_scan():
+        ip_start = range_start_entry.get().strip()
+        ip_end = range_end_entry.get().strip()
+        scan_ip_range(ip_start, ip_end)
 
     def handle_port_scan():
-        ip = simpledialog.askstring("Port Scan", "Enter the IP address to scan for open ports:")
-        if not ip or not is_valid_ip(ip):
-            messagebox.showerror("Error", "Invalid IP address. Please try again.")
-            return
-
-        ports = simpledialog.askstring("Port Scan", "Enter the ports to scan (comma-separated, e.g., 22,80,443):")
+        ip = single_ip_entry.get().strip()
         try:
-            ports = [int(port.strip()) for port in ports.split(",")]
-            if all(is_valid_port(port) for port in ports):
-                result = scan_ports(ip, ports)
-                messagebox.showinfo("Port Scan Results", result)
-            else:
-                messagebox.showerror("Error", "One or more ports are invalid. Please try again.")
+            ports = [int(port.strip()) for port in ports_entry.get().split(",")]
+            scan_ports(ip, ports)
         except ValueError:
-            messagebox.showerror("Error", "Invalid input. Please enter a list of integers separated by commas.")
-
-    def handle_exit():
-        root.destroy()
+            messagebox.showerror("Error", "Invalid port list. Please enter comma-separated integers.")
 
     root = tk.Tk()
     root.title("Network Scanner")
 
-    tk.Label(root, text="Welcome to my Network Scanner!", font=("Helvetica", 16)).pack(pady=10)
+    tk.Label(root, text="Single IP Address:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+    single_ip_entry = tk.Entry(root, width=30)
+    single_ip_entry.grid(row=0, column=1, padx=5, pady=5)
 
-    tk.Button(root, text="Ping a Single IP", command=handle_ping, width=30).pack(pady=5)
-    tk.Button(root, text="Scan IP Range", command=handle_ip_range, width=30).pack(pady=5)
-    tk.Button(root, text="Scan Ports on an IP", command=handle_port_scan, width=30).pack(pady=5)
-    tk.Button(root, text="Exit", command=handle_exit, width=30).pack(pady=5)
+    tk.Label(root, text="IP Range Start:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+    range_start_entry = tk.Entry(root, width=30)
+    range_start_entry.grid(row=1, column=1, padx=5, pady=5)
+
+    tk.Label(root, text="IP Range End:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+    range_end_entry = tk.Entry(root, width=30)
+    range_end_entry.grid(row=2, column=1, padx=5, pady=5)
+
+    tk.Label(root, text="Ports (comma-separated):").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+    ports_entry = tk.Entry(root, width=30)
+    ports_entry.grid(row=3, column=1, padx=5, pady=5)
+
+    single_ip_button = tk.Button(root, text="Scan Single IP", command=handle_single_ip_scan)
+    single_ip_button.grid(row=4, column=0, padx=5, pady=5)
+
+    range_scan_button = tk.Button(root, text="Scan IP Range", command=handle_range_scan)
+    range_scan_button.grid(row=4, column=1, padx=5, pady=5)
+
+    port_scan_button = tk.Button(root, text="Scan Ports", command=handle_port_scan)
+    port_scan_button.grid(row=5, column=0, padx=5, pady=5)
+
+    save_button = tk.Button(root, text="Save Configuration", command=handle_save)
+    save_button.grid(row=5, column=1, padx=5, pady=5)
 
     root.mainloop()
 
 if __name__ == "__main__":
-    start_gui()
+    main_gui()
